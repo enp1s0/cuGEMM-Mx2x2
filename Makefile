@@ -5,9 +5,12 @@ NVCCFLAGS+=-gencode arch=compute_70,code=sm_70
 NVCCFLAGS+=-gencode arch=compute_80,code=sm_80
 NVCCFLAGS+=-I./include
 
-TARGET=lib/libcugemm_Mx2x2.a
+TARGET:test.out
 
-$(TARGET):obj/main.o obj/main.dlink.o
+LIB_TARGET=lib/libcugemm_Mx2x2.a
+
+
+$(LIB_TARGET):obj/main.o obj/main.dlink.o
 	mkdir -p lib
 	$(NVCC) $< -o $@ $(NVCCFLAGS) -lib
 
@@ -21,7 +24,7 @@ obj/main.dlink.o:obj/main.o
 
 test: test.out
 
-test.out: test/main.cu $(TARGET)
+test.out: test/main.cu $(LIB_TARGET)
 	$(NVCC) $+ -o $@ $(NVCCFLAGS)
   
 clean:
