@@ -115,20 +115,19 @@ __device__ void gemm_core(
 			for (unsigned m = 0; m < M_PER_THREAD; m++) {
 				for (unsigned n = 0; n < N; n++) {
 					std::size_t index = m + m_offset + n * ldc;
-					frag_c[n + m * N + stage * M_PER_THREAD * N] = c_ptr[index];
+					frag_c[m + n * M_PER_THREAD + stage * M_PER_THREAD * N] = c_ptr[index];
 				}
 			}
 		}
 
 		stage = 1 - stage;
 		const auto stage_offset_a = stage * M_PER_THREAD * K;
-		const auto stage_offset_b = stage * K * N;
 		const auto stage_offset_c = stage * M_PER_THREAD * N;
 		for (unsigned m = 0; m < M_PER_THREAD; m++) {
 			for (unsigned n = 0; n < N; n++) {
 				auto c = detail::zero<T>();
 				for (unsigned k = 0; k < K; k++) {
-					c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k + stage_offset_b], c);
+					c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k], c);
 				}
 				if (BETA) {
 					c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage_offset_c]));
@@ -143,13 +142,12 @@ __device__ void gemm_core(
 	}
 	stage = 1 - stage;
 	const auto stage_offset_a = stage * M_PER_THREAD * K;
-	const auto stage_offset_b = stage * K * N;
 	const auto stage_offset_c = stage * M_PER_THREAD * N;
 	for (unsigned m = 0; m < M_PER_THREAD; m++) {
 		for (unsigned n = 0; n < N; n++) {
 			auto c = detail::zero<T>();
 			for (unsigned k = 0; k < K; k++) {
-				c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k + stage_offset_b], c);
+				c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k], c);
 			}
 			if (BETA) {
 				c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage_offset_c]));
@@ -187,7 +185,7 @@ void gemm_internal(
 	assert(M >= M_PER_THREAD);
 	assert((M & (M - 1)) == 0);
 	const auto min_grid_size = std::max<unsigned>(M / (M_PER_THREAD * BLOCK_SIZE), 1u);
-	const auto grid_size = std::min<unsigned>(min_grid_size, 1024u);
+	const auto grid_size = min_grid_size;
 
 	if (detail::is_zero(beta)) {
 		gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
@@ -227,7 +225,7 @@ void mtk::cugemm::gemm_Mx2x2<cuComplex>(
 		cuComplex* const c_ptr, const std::size_t ldc
 		) {
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		constexpr unsigned M_PER_THREAD = 4;
+		constexpr unsigned M_PER_THREAD = 2;
 		constexpr unsigned BLOCK_SIZE = 256;
 		gemm_internal<cuComplex, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	}
