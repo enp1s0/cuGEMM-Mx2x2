@@ -87,7 +87,7 @@ __device__ void gemm_core(
 	if (!BETA) {
 		for (unsigned m = 0; m < M_PER_THREAD; m++) {
 			for (unsigned n = 0; n < N; n++) {
-				std::size_t index = m + n * ldc;
+				std::size_t index = m + m_offset + n * ldc;
 				frag_c[n + m * N] = c_ptr[index];
 			}
 		}
@@ -121,19 +121,22 @@ __device__ void gemm_core(
 		}
 
 		stage = 1 - stage;
+		const auto stage_offset_a = stage * M_PER_THREAD * K;
+		const auto stage_offset_b = stage * K * N;
+		const auto stage_offset_c = stage * M_PER_THREAD * N;
 		for (unsigned m = 0; m < M_PER_THREAD; m++) {
 			for (unsigned n = 0; n < N; n++) {
 				auto c = detail::zero<T>();
 				for (unsigned k = 0; k < K; k++) {
-					c = detail::fma(frag_a[m * K + k + stage * M_PER_THREAD * N], frag_b[n * K + k + stage * M_PER_THREAD * N], c);
+					c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k + stage_offset_b], c);
 				}
 				if (BETA) {
-					c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage * M_PER_THREAD * N]));
+					c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage_offset_c]));
 				} else {
 					c = detail::mul(alpha, c);
 				}
 
-				std::size_t index = m + m_offset + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
+				std::size_t index = (m + m_offset) + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
 				c_ptr[index] = c;
 			}
 		}
