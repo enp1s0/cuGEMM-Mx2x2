@@ -3,7 +3,7 @@
 #include <iostream>
 #include <cugemm_Mx2x2.hpp>
 
-constexpr unsigned num_perf_test = 1;
+constexpr unsigned num_perf_test = 10;
 
 namespace {
 float fma(const float a, const float b, const float c) {return a * b + c;}
@@ -39,6 +39,7 @@ double gemm_Mx2x2_residual(
 		) {
 	double diff_norm2 = 0.;
 	double base_norm2 = 0.;
+#pragma omp parallel for reduction(+: diff_norm2) reduction(+: base_norm2)
 	for (unsigned m = 0; m < M; m++) {
 		for (unsigned n = 0; n < 2; n++) {
 			T c = zero<T>();
@@ -78,6 +79,8 @@ int main(int argc, char** argv) {
 	auto gemm_mode = gemm_mode_t::none;
 	if (gemm_mode_str == "sgemm") {
 		gemm_mode = gemm_mode_t::sgemm;
+	} else if (gemm_mode_str == "cgemm") {
+		gemm_mode = gemm_mode_t::cgemm;
 	}
 
 	const std::string op_a_str = argv[2];
@@ -111,7 +114,7 @@ int main(int argc, char** argv) {
 		mat_b_size *= 2 * sizeof(float);
 		mat_c_size *= 2 * sizeof(float);
 		num_elements *= 2 * sizeof(float);
-		complexity *= 2lu;
+		complexity *= 4lu;
 	}
 
 	float *host_mat_a, *host_mat_b, *host_mat_c, *host_mat_t;
