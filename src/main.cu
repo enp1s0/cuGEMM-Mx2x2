@@ -15,15 +15,15 @@ __device__ float fma(const float a, const float b, const float c) {return fmaf(a
 __device__ cuComplex fma(const cuComplex a, const cuComplex b, const cuComplex c) {
 	return make_cuComplex(
 			fma(a.x, b.x, fma(-a.y, b.y, c.x)),
-			fma(a.y, b.x, fma( a.y, b.x, c.y))
+			fma(a.y, b.x, fma( a.x, b.y, c.y))
 			);
 }
 
-__device__ float mul(const float a, const float b) {return mul(a, b);}
+__device__ float mul(const float a, const float b) {return a * b;}
 __device__ cuComplex mul(const cuComplex a, const cuComplex b) {
 	return make_cuComplex(
 			fma(a.x, b.x, mul(-a.y, b.y)),
-			fma(a.y, b.x, mul( a.y, b.x))
+			fma(a.y, b.x, mul( a.x, b.y))
 			);
 }
 
@@ -31,6 +31,11 @@ template <class T>
 __device__ T zero() {return 0.f;}
 template <>
 __device__ cuComplex zero<cuComplex>() {return make_cuComplex(0.f, 0.f);}
+
+template <class T>
+__device__ T make_T(float a) {return a;}
+template <>
+__device__ cuComplex make_T<cuComplex>(float a) {return make_cuComplex(a, a);}
 } // namespace detail
 
 namespace {
@@ -57,7 +62,7 @@ __device__ void gemm_core(
 			} else {
 				index = n + k * ldb;
 			}
-			frag_b[k + n * K] = a_ptr[index];
+			frag_b[k + n * K] = b_ptr[index];
 		}
 	}
 	unsigned m_offset = M_PER_THREAD * (threadIdx.x + blockIdx.x * blockDim.x);
@@ -70,9 +75,9 @@ __device__ void gemm_core(
 		for (unsigned k = 0; k < K; k++) {
 			std::size_t index;
 			if (std::is_same<LAYOUT_A, col_major>::value) {
-				index = m + k * lda;
+				index = m + m_offset + k * lda;
 			} else {
-				index = k + m * lda;
+				index = k + (m + m_offset) * lda;
 			}
 			frag_a[k + m * K] = a_ptr[index];
 		}
@@ -97,7 +102,7 @@ __device__ void gemm_core(
 			for (unsigned k = 0; k < K; k++) {
 				std::size_t index;
 				if (std::is_same<LAYOUT_A, col_major>::value) {
-					index = (m + m_offset) + k * lda;
+					index = m + m_offset + k * lda;
 				} else {
 					index = k + (m + m_offset) * lda;
 				}
@@ -134,19 +139,22 @@ __device__ void gemm_core(
 		}
 	}
 	stage = 1 - stage;
+	const auto stage_offset_a = stage * M_PER_THREAD * K;
+	const auto stage_offset_b = stage * K * N;
+	const auto stage_offset_c = stage * M_PER_THREAD * N;
 	for (unsigned m = 0; m < M_PER_THREAD; m++) {
 		for (unsigned n = 0; n < N; n++) {
 			auto c = detail::zero<T>();
 			for (unsigned k = 0; k < K; k++) {
-				c = detail::fma(frag_a[m * K + k + stage * M_PER_THREAD * N], frag_b[n * K + k + stage * M_PER_THREAD * N], c);
+				c = detail::fma(frag_a[m * K + k + stage_offset_a], frag_b[n * K + k + stage_offset_b], c);
 			}
 			if (BETA) {
-				c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage * M_PER_THREAD * N]));
+				c = detail::fma(alpha, c, detail::mul(beta, frag_c[m + n * M_PER_THREAD + stage_offset_c]));
 			} else {
 				c = detail::mul(alpha, c);
 			}
 
-			std::size_t index = m + m_offset + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
+			std::size_t index = (m + m_offset) + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
 			c_ptr[index] = c;
 		}
 	}
