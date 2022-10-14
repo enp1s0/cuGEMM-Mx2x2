@@ -1,4 +1,4 @@
-# CUDA kernels for M x 2 x 2 S/C GEMM
+# CUDA kernels for S/C GEMM-(M, 2, 2)
 
 since cuBLAS gemm functions are not optimized for such gemm shapes...
 
@@ -22,6 +22,8 @@ nvcc ... -L/path/to/lib -libcugemm_Mx2x2 ...
 ```
 
 ## Performance
+
+- CGEMM
 
 ![performacne](./docs/gemm_Mx2x2.png)
 
