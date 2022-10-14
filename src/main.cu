@@ -321,7 +321,7 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<cuComplex>(
 		cuComplex* const c_ptr, const std::size_t ldc, const std::size_t stridec,
 		const unsigned batch_count
 		) {
-	constexpr unsigned M_PER_THREAD = 4;
+	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
 		gemm_strided_batch_internal<cuComplex, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
