@@ -206,10 +206,10 @@ __global__ void gemm_strided_batch_kernel(
 	gemm_core<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, BETA, N, K>(
 			M,
 			alpha,
-			a_ptr + stridea * blockDim.y, lda,
-			b_ptr + strideb * blockDim.y, ldb,
+			a_ptr + stridea * blockIdx.y, lda,
+			b_ptr + strideb * blockIdx.y, ldb,
 			beta,
-			c_ptr + stridec * blockDim.y, ldc
+			c_ptr + stridec * blockIdx.y, ldc
 			);
 }
 
