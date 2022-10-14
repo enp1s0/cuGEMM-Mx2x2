@@ -65,15 +65,15 @@ double gemm_Mx2x2_residual(
 enum gemm_mode_t {
 	none,
 	sgemm,
-	cgemm
+	cgemm,
 };
 
 int main(int argc, char** argv) {
 	if (argc <= 4) {
-		std::fprintf(stderr, "Usage: %s [GEMM mode (sgemm/cgemm)] [A Layout (N/T)] [B Layout (N/T)] [M]\n", argv[0]);
+		std::fprintf(stderr, "Usage: %s [GEMM mode (sgemm/cgemm)] [A Layout (N/T)] [B Layout (N/T)] [M] [(Optional) batch count]\n", argv[0]);
 		return 1;
 	}
-	std::printf("M,residual,throughput_in_tflops,bw\n");
+	std::printf("mode,M,batch_size,residual,throughput_in_tflops,bw\n");
 
 	const std::string gemm_mode_str = argv[1];
 	auto gemm_mode = gemm_mode_t::none;
@@ -82,6 +82,12 @@ int main(int argc, char** argv) {
 	} else if (gemm_mode_str == "cgemm") {
 		gemm_mode = gemm_mode_t::cgemm;
 	}
+
+	unsigned batch_size = 1;
+	if (argc > 5) {
+		batch_size = std::stoul(argv[5]);
+	}
+
 
 	const std::string op_a_str = argv[2];
 	const std::string op_b_str = argv[3];
@@ -98,22 +104,17 @@ int main(int argc, char** argv) {
 	}
 	const auto M = std::stoul(argv[4]);
 
-	auto mat_a_size = M * 2lu;
-	auto mat_b_size = 2 * 2lu;
-	auto mat_c_size = M * 2lu;
+	auto mat_a_size = M * 2lu * batch_size * sizeof(float);
+	auto mat_b_size = 2 * 2lu * batch_size * sizeof(float);
+	auto mat_c_size = M * 2lu * batch_size * sizeof(float);
 
-	std::size_t complexity = 2lu * 2 * 2 * M;
-	std::size_t num_elements = 2lu * 2lu + 2lu * M + 2lu * M;
-	if (gemm_mode == gemm_mode_t::sgemm) {
-		mat_a_size *= sizeof(float);
-		mat_b_size *= sizeof(float);
-		mat_c_size *= sizeof(float);
-		num_elements *= sizeof(float);
-	} else if (gemm_mode == gemm_mode_t::cgemm) {
-		mat_a_size *= 2 * sizeof(float);
-		mat_b_size *= 2 * sizeof(float);
-		mat_c_size *= 2 * sizeof(float);
-		num_elements *= 2 * sizeof(float);
+	std::size_t complexity = 2lu * 2 * 2 * M * batch_size;
+	std::size_t num_elements = (2lu * 2lu + 2lu * M + 2lu * M) * batch_size;
+	if (gemm_mode == gemm_mode_t::cgemm) {
+		mat_a_size *= 2;
+		mat_b_size *= 2;
+		mat_c_size *= 2;
+		num_elements *= 2;
 		complexity *= 4lu;
 	}
 
@@ -145,35 +146,12 @@ int main(int argc, char** argv) {
 	cudaMemcpy(dev_mat_c, host_mat_c, mat_c_size, cudaMemcpyDefault);
 
 	double elapsed_time_per_gemm = 0;
-	double residual;
+	double residual = 0;
 
 	if (gemm_mode == gemm_mode_t::sgemm) {
 		const auto alpha = 1.f;
 		const auto beta = 0.f;
-		mtk::cugemm::gemm_Mx2x2(
-				op_a, op_b,
-				M,
-				alpha,
-				dev_mat_a, (op_a == CUBLAS_OP_N ? M : 2),
-				dev_mat_b, 2,
-				beta,
-				dev_mat_c, M
-				);
-		cudaMemcpy(host_mat_t, dev_mat_c, mat_c_size, cudaMemcpyDefault);
-		residual = gemm_Mx2x2_residual(
-				op_a, op_b,
-				M,
-				alpha,
-				host_mat_a, (op_a == CUBLAS_OP_N ? M : 2),
-				host_mat_b, 2,
-				beta,
-				host_mat_c, M,
-				host_mat_t, M
-				);
-		// throughput
-		cudaDeviceSynchronize();
-		const auto start_clock = std::chrono::system_clock::now();
-		for (unsigned i = 0; i < num_perf_test; i++) {
+		if (batch_size == 1) {
 			mtk::cugemm::gemm_Mx2x2(
 					op_a, op_b,
 					M,
@@ -183,6 +161,58 @@ int main(int argc, char** argv) {
 					beta,
 					dev_mat_c, M
 					);
+		} else {
+			mtk::cugemm::gemm_strided_batch_Mx2x2(
+					op_a, op_b,
+					M,
+					alpha,
+					dev_mat_a, (op_a == CUBLAS_OP_N ? M : 2), M * 2,
+					dev_mat_b, 2, 2 * 2,
+					beta,
+					dev_mat_c, M, M * 2,
+					batch_size
+					);
+		}
+		cudaMemcpy(host_mat_t, dev_mat_c, mat_c_size, cudaMemcpyDefault);
+		for (unsigned b = 0; b < batch_size; b++) {
+			residual += gemm_Mx2x2_residual(
+					op_a, op_b,
+					M,
+					alpha,
+					host_mat_a + M * 2 * b, (op_a == CUBLAS_OP_N ? M : 2),
+					host_mat_b + 2 * 2 * b, 2,
+					beta,
+					host_mat_c + M * 2 * b, M,
+					host_mat_t + M * 2 * b, M
+					);
+		}
+		residual /= batch_size;
+		// throughput
+		cudaDeviceSynchronize();
+		const auto start_clock = std::chrono::system_clock::now();
+		for (unsigned i = 0; i < num_perf_test; i++) {
+			if (batch_size == 1) {
+				mtk::cugemm::gemm_Mx2x2(
+						op_a, op_b,
+						M,
+						alpha,
+						dev_mat_a, (op_a == CUBLAS_OP_N ? M : 2),
+						dev_mat_b, 2,
+						beta,
+						dev_mat_c, M
+						);
+			} else {
+				mtk::cugemm::gemm_strided_batch_Mx2x2(
+						op_a, op_b,
+						M,
+						alpha,
+						dev_mat_a, (op_a == CUBLAS_OP_N ? M : 2), M * 2,
+						dev_mat_b, 2, 2 * 2,
+						beta,
+						dev_mat_c, M, M * 2,
+						batch_size
+						);
+			}
 		}
 		cudaDeviceSynchronize();
 		const auto end_clock = std::chrono::system_clock::now();
@@ -190,30 +220,7 @@ int main(int argc, char** argv) {
 	} else if (gemm_mode == gemm_mode_t::cgemm) {
 		const auto alpha = make_cuComplex(1.f, 0.f);
 		const auto beta = make_cuComplex(0.f, 0.f);
-		mtk::cugemm::gemm_Mx2x2(
-				op_a, op_b,
-				M,
-				alpha,
-				reinterpret_cast<cuComplex*>(dev_mat_a), (op_a == CUBLAS_OP_N ? M : 2),
-				reinterpret_cast<cuComplex*>(dev_mat_b), 2,
-				beta,
-				reinterpret_cast<cuComplex*>(dev_mat_c), M
-				);
-		cudaMemcpy(host_mat_t, dev_mat_c, mat_c_size, cudaMemcpyDefault);
-		residual = gemm_Mx2x2_residual(
-				op_a, op_b,
-				M,
-				alpha,
-				reinterpret_cast<cuComplex*>(host_mat_a), (op_a == CUBLAS_OP_N ? M : 2),
-				reinterpret_cast<cuComplex*>(host_mat_b), 2,
-				beta,
-				reinterpret_cast<cuComplex*>(host_mat_c), M,
-				reinterpret_cast<cuComplex*>(host_mat_t), M
-				);
-		// throughput
-		cudaDeviceSynchronize();
-		const auto start_clock = std::chrono::system_clock::now();
-		for (unsigned i = 0; i < num_perf_test; i++) {
+		if (batch_size == 1) {
 			mtk::cugemm::gemm_Mx2x2(
 					op_a, op_b,
 					M,
@@ -223,6 +230,58 @@ int main(int argc, char** argv) {
 					beta,
 					reinterpret_cast<cuComplex*>(dev_mat_c), M
 					);
+		} else {
+			mtk::cugemm::gemm_strided_batch_Mx2x2(
+					op_a, op_b,
+					M,
+					alpha,
+					reinterpret_cast<cuComplex*>(dev_mat_a), (op_a == CUBLAS_OP_N ? M : 2), M * 2,
+					reinterpret_cast<cuComplex*>(dev_mat_b), 2, 2 * 2,
+					beta,
+					reinterpret_cast<cuComplex*>(dev_mat_c), M, M * 2,
+					batch_size
+					);
+		}
+		cudaMemcpy(host_mat_t, dev_mat_c, mat_c_size, cudaMemcpyDefault);
+		for (unsigned b = 0; b < batch_size; b++) {
+			residual += gemm_Mx2x2_residual(
+					op_a, op_b,
+					M,
+					alpha,
+					reinterpret_cast<cuComplex*>(host_mat_a) + M * 2 * b, (op_a == CUBLAS_OP_N ? M : 2),
+					reinterpret_cast<cuComplex*>(host_mat_b) + 2 * 2 * b, 2,
+					beta,
+					reinterpret_cast<cuComplex*>(host_mat_c) + M * 2 * b, M,
+					reinterpret_cast<cuComplex*>(host_mat_t) + M * 2 * b, M
+					);
+		}
+		residual /= batch_size;
+		// throughput
+		cudaDeviceSynchronize();
+		const auto start_clock = std::chrono::system_clock::now();
+		for (unsigned i = 0; i < num_perf_test; i++) {
+			if (batch_size == 1) {
+				mtk::cugemm::gemm_Mx2x2(
+						op_a, op_b,
+						M,
+						alpha,
+						reinterpret_cast<cuComplex*>(dev_mat_a), (op_a == CUBLAS_OP_N ? M : 2),
+						reinterpret_cast<cuComplex*>(dev_mat_b), 2,
+						beta,
+						reinterpret_cast<cuComplex*>(dev_mat_c), M
+						);
+			} else {
+				mtk::cugemm::gemm_strided_batch_Mx2x2(
+						op_a, op_b,
+						M,
+						alpha,
+						reinterpret_cast<cuComplex*>(dev_mat_a), (op_a == CUBLAS_OP_N ? M : 2), M * 2,
+						reinterpret_cast<cuComplex*>(dev_mat_b), 2, 2 * 2,
+						beta,
+						reinterpret_cast<cuComplex*>(dev_mat_c), M, M * 2,
+						batch_size
+						);
+			}
 		}
 		cudaDeviceSynchronize();
 		const auto end_clock = std::chrono::system_clock::now();
@@ -230,10 +289,12 @@ int main(int argc, char** argv) {
 	}
 
 	const auto throughput_in_tflops = complexity / elapsed_time_per_gemm * 1e-12;
-	const auto bandwidth_in_tb_per_s = num_elements / elapsed_time_per_gemm * 1e-12;
+	const auto bandwidth_in_tb_per_s = num_elements * sizeof(float) / elapsed_time_per_gemm * 1e-12;
 
-	std::printf("%lu,%e,%e,%e\n",
+	std::printf("%s,%lu,%u,%e,%e,%e\n",
+			gemm_mode_str.c_str(),
 			M,
+			batch_size,
 			residual,
 			throughput_in_tflops,
 			bandwidth_in_tb_per_s
