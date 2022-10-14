@@ -206,10 +206,16 @@ void mtk::cugemm::gemm_Mx2x2<float>(
 		const float beta,
 		float* const c_ptr, const std::size_t ldc
 		) {
+	constexpr unsigned M_PER_THREAD = 4;
+	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		constexpr unsigned M_PER_THREAD = 4;
-		constexpr unsigned BLOCK_SIZE = 256;
 		gemm_internal<float, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	}
 }
 
@@ -224,9 +230,15 @@ void mtk::cugemm::gemm_Mx2x2<cuComplex>(
 		const cuComplex beta,
 		cuComplex* const c_ptr, const std::size_t ldc
 		) {
+	constexpr unsigned M_PER_THREAD = 2;
+	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		constexpr unsigned M_PER_THREAD = 2;
-		constexpr unsigned BLOCK_SIZE = 256;
 		gemm_internal<cuComplex, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	}
 }
