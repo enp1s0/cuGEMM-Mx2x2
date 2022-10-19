@@ -39,7 +39,7 @@ __device__ cuComplex make_T<cuComplex>(float a) {return make_cuComplex(a, a);}
 } // namespace detail
 
 namespace {
-template <class T, class LAYOUT_A, class LAYOUT_B, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
+template <class T, class LAYOUT_A, class LAYOUT_B, class LAYOUT_C, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
 __device__ void gemm_core(
 		const unsigned M,
 		const T alpha,
@@ -87,7 +87,12 @@ __device__ void gemm_core(
 	if (!BETA) {
 		for (unsigned m = 0; m < M_PER_THREAD; m++) {
 			for (unsigned n = 0; n < N; n++) {
-				std::size_t index = m + m_offset + n * ldc;
+				std::size_t index;
+				if (std::is_same<LAYOUT_C, col_major>::value) {
+					index = m + m_offset + n * ldc;
+				} else {
+					index = (m + m_offset) * ldc + n;
+				}
 				frag_c[n + m * N] = c_ptr[index];
 			}
 		}
@@ -114,7 +119,12 @@ __device__ void gemm_core(
 		if (!BETA) {
 			for (unsigned m = 0; m < M_PER_THREAD; m++) {
 				for (unsigned n = 0; n < N; n++) {
-					std::size_t index = m + m_offset + n * ldc;
+					std::size_t index;
+					if (std::is_same<LAYOUT_C, col_major>::value) {
+						index = m + m_offset + n * ldc;
+					} else {
+						index = (m + m_offset) * ldc + n;
+					}
 					frag_c[m + n * M_PER_THREAD + stage * M_PER_THREAD * N] = c_ptr[index];
 				}
 			}
@@ -135,7 +145,12 @@ __device__ void gemm_core(
 					c = detail::mul(alpha, c);
 				}
 
-				std::size_t index = (m + m_offset) + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
+				std::size_t index;
+				if (std::is_same<LAYOUT_C, col_major>::value) {
+					index = m + m_offset - M_PER_THREAD * gridDim.x * blockDim.x + n * ldc;
+				} else {
+					index = (m + m_offset - M_PER_THREAD * gridDim.x * blockDim.x) * ldc + n;
+				}
 				c_ptr[index] = c;
 			}
 		}
@@ -155,13 +170,18 @@ __device__ void gemm_core(
 				c = detail::mul(alpha, c);
 			}
 
-			std::size_t index = (m + m_offset) + n * ldc - M_PER_THREAD * gridDim.x * blockDim.x;
+			std::size_t index;
+			if (std::is_same<LAYOUT_C, col_major>::value) {
+				index = m + m_offset - M_PER_THREAD * gridDim.x * blockDim.x + n * ldc;
+			} else {
+				index = (m + m_offset - M_PER_THREAD * gridDim.x * blockDim.x) * ldc + n;
+			}
 			c_ptr[index] = c;
 		}
 	}
 }
 
-template <class T, class LAYOUT_A, class LAYOUT_B, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
+template <class T, class LAYOUT_A, class LAYOUT_B, class LAYOUT_C, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
 __global__ void gemm_kernel(
 		const unsigned M,
 		const T alpha,
@@ -170,10 +190,10 @@ __global__ void gemm_kernel(
 		const T beta,
 		T* const c_ptr, const std::size_t ldc
 		) {
-	gemm_core<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, BETA, N, K>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	gemm_core<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, BETA, N, K>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 }
 
-template <class T, class LAYOUT_A, class LAYOUT_B, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, unsigned N = 2, unsigned K = 2>
+template <class T, class LAYOUT_A, class LAYOUT_B, class LAYOUT_C, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, unsigned N = 2, unsigned K = 2>
 void gemm_internal(
 		const unsigned M,
 		const T alpha,
@@ -188,20 +208,20 @@ void gemm_internal(
 
 	if (M >= BLOCK_SIZE) {
 		if (detail::is_zero(beta)) {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		} else {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		}
 	} else {
 		if (detail::is_zero(beta)) {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		} else {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		}
 	}
 }
 
-template <class T, class LAYOUT_A, class LAYOUT_B, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
+template <class T, class LAYOUT_A, class LAYOUT_B, class LAYOUT_C, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, bool BETA, unsigned N = 2, unsigned K = 2>
 __global__ void gemm_strided_batch_kernel(
 		const unsigned M,
 		const T alpha,
@@ -210,7 +230,7 @@ __global__ void gemm_strided_batch_kernel(
 		const T beta,
 		T* const c_ptr, const std::size_t ldc, const std::size_t stridec
 		) {
-	gemm_core<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, BETA, N, K>(
+	gemm_core<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, BETA, N, K>(
 			M,
 			alpha,
 			a_ptr + stridea * blockIdx.y, lda,
@@ -220,7 +240,7 @@ __global__ void gemm_strided_batch_kernel(
 			);
 }
 
-template <class T, class LAYOUT_A, class LAYOUT_B, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, unsigned N = 2, unsigned K = 2>
+template <class T, class LAYOUT_A, class LAYOUT_B, class LAYOUT_C, unsigned BLOCK_SIZE, unsigned M_PER_THREAD, unsigned N = 2, unsigned K = 2>
 void gemm_strided_batch_internal(
 		const unsigned M,
 		const T alpha,
@@ -236,15 +256,15 @@ void gemm_strided_batch_internal(
 
 	if (M >= BLOCK_SIZE) {
 		if (detail::is_zero(beta)) {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		} else {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		}
 	} else {
 		if (detail::is_zero(beta)) {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		} else {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		}
 	}
 }
@@ -264,13 +284,13 @@ void mtk::cugemm::gemm_Mx2x2<float>(
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	}
 }
 
@@ -288,13 +308,13 @@ void mtk::cugemm::gemm_Mx2x2<cuComplex>(
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 	}
 }
 
@@ -313,13 +333,13 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<float>(
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	}
 }
 
@@ -338,12 +358,111 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<cuComplex>(
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+	}
+}
+
+// gemm_2xNx2
+template <>
+void mtk::cugemm::gemm_2xNx2<float>(
+		const cublasOperation_t op_a,
+		const cublasOperation_t op_b,
+		const unsigned N,
+		const float alpha,
+		const float* const a_ptr, const std::size_t lda,
+		const float* const b_ptr, const std::size_t ldb,
+		const float beta,
+		float* const c_ptr, const std::size_t ldc
+		) {
+	constexpr unsigned M_PER_THREAD = 4;
+	constexpr unsigned BLOCK_SIZE = 256;
+	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	}
+}
+
+template <>
+void mtk::cugemm::gemm_2xNx2<cuComplex>(
+		const cublasOperation_t op_a,
+		const cublasOperation_t op_b,
+		const unsigned N,
+		const cuComplex alpha,
+		const cuComplex* const a_ptr, const std::size_t lda,
+		const cuComplex* const b_ptr, const std::size_t ldb,
+		const cuComplex beta,
+		cuComplex* const c_ptr, const std::size_t ldc
+		) {
+	constexpr unsigned M_PER_THREAD = 2;
+	constexpr unsigned BLOCK_SIZE = 256;
+	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+	}
+}
+
+template <>
+void mtk::cugemm::gemm_strided_batch_2xNx2<float>(
+		const cublasOperation_t op_a,
+		const cublasOperation_t op_b,
+		const unsigned N,
+		const float alpha,
+		const float* const a_ptr, const std::size_t lda, const std::size_t stridea,
+		const float* const b_ptr, const std::size_t ldb, const std::size_t strideb,
+		const float beta,
+		float* const c_ptr, const std::size_t ldc, const std::size_t stridec,
+		const unsigned batch_count
+		) {
+	constexpr unsigned M_PER_THREAD = 4;
+	constexpr unsigned BLOCK_SIZE = 256;
+	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	}
+}
+
+template <>
+void mtk::cugemm::gemm_strided_batch_2xNx2<cuComplex>(
+		const cublasOperation_t op_a,
+		const cublasOperation_t op_b,
+		const unsigned N,
+		const cuComplex alpha,
+		const cuComplex* const a_ptr, const std::size_t lda, const std::size_t stridea,
+		const cuComplex* const b_ptr, const std::size_t ldb, const std::size_t strideb,
+		const cuComplex beta,
+		cuComplex* const c_ptr, const std::size_t ldc, const std::size_t stridec,
+		const unsigned batch_count
+		) {
+	constexpr unsigned M_PER_THREAD = 2;
+	constexpr unsigned BLOCK_SIZE = 256;
+	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+		gemm_strided_batch_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
 	}
 }
