@@ -200,7 +200,8 @@ void gemm_internal(
 		const T* const a_ptr, const std::size_t lda,
 		const T* const b_ptr, const std::size_t ldb,
 		const T beta,
-		T* const c_ptr, const std::size_t ldc
+		T* const c_ptr, const std::size_t ldc,
+		cudaStream_t cuda_stream
 		) {
 	assert((M & (M - 1)) == 0);
 	const auto min_grid_size = std::max<unsigned>(M / (M_PER_THREAD * BLOCK_SIZE), 1u);
@@ -208,15 +209,15 @@ void gemm_internal(
 
 	if (M >= BLOCK_SIZE) {
 		if (detail::is_zero(beta)) {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		} else {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		}
 	} else {
 		if (detail::is_zero(beta)) {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		} else {
-			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
 		}
 	}
 }
@@ -248,7 +249,8 @@ void gemm_strided_batch_internal(
 		const T* const b_ptr, const std::size_t ldb, const std::size_t strideb,
 		const T beta,
 		T* const c_ptr, const std::size_t ldc, const std::size_t stridec,
-		const std::size_t batch_count
+		const std::size_t batch_count,
+		cudaStream_t cuda_stream
 		) {
 	assert((M & (M - 1)) == 0);
 	const auto min_grid_size = std::max<unsigned>(M / (M_PER_THREAD * BLOCK_SIZE), 1u);
@@ -256,15 +258,15 @@ void gemm_strided_batch_internal(
 
 	if (M >= BLOCK_SIZE) {
 		if (detail::is_zero(beta)) {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		} else {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		}
 	} else {
 		if (detail::is_zero(beta)) {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		} else {
-			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, LAYOUT_C, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
 		}
 	}
 }
@@ -279,18 +281,19 @@ void mtk::cugemm::gemm_Mx2x2<float>(
 		const float* const a_ptr, const std::size_t lda,
 		const float* const b_ptr, const std::size_t ldb,
 		const float beta,
-		float* const c_ptr, const std::size_t ldc
+		float* const c_ptr, const std::size_t ldc,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	}
 }
 
@@ -303,18 +306,19 @@ void mtk::cugemm::gemm_Mx2x2<cuComplex>(
 		const cuComplex* const a_ptr, const std::size_t lda,
 		const cuComplex* const b_ptr, const std::size_t ldb,
 		const cuComplex beta,
-		cuComplex* const c_ptr, const std::size_t ldc
+		cuComplex* const c_ptr, const std::size_t ldc,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	}
 }
 
@@ -328,18 +332,19 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<float>(
 		const float* const b_ptr, const std::size_t ldb, const std::size_t strideb,
 		const float beta,
 		float* const c_ptr, const std::size_t ldc, const std::size_t stridec,
-		const unsigned batch_count
+		const unsigned batch_count,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
 
@@ -353,18 +358,19 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<cuComplex>(
 		const cuComplex* const b_ptr, const std::size_t ldb, const std::size_t strideb,
 		const cuComplex beta,
 		cuComplex* const c_ptr, const std::size_t ldc, const std::size_t stridec,
-		const unsigned batch_count
+		const unsigned batch_count,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
 
@@ -378,18 +384,19 @@ void mtk::cugemm::gemm_2xNx2<float>(
 		const float* const a_ptr, const std::size_t lda,
 		const float* const b_ptr, const std::size_t ldb,
 		const float beta,
-		float* const c_ptr, const std::size_t ldc
+		float* const c_ptr, const std::size_t ldc,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	}
 }
 
@@ -402,18 +409,19 @@ void mtk::cugemm::gemm_2xNx2<cuComplex>(
 		const cuComplex* const a_ptr, const std::size_t lda,
 		const cuComplex* const b_ptr, const std::size_t ldb,
 		const cuComplex beta,
-		cuComplex* const c_ptr, const std::size_t ldc
+		cuComplex* const c_ptr, const std::size_t ldc,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc);
+		gemm_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	}
 }
 
@@ -427,18 +435,19 @@ void mtk::cugemm::gemm_strided_batch_2xNx2<float>(
 		const float* const b_ptr, const std::size_t ldb, const std::size_t strideb,
 		const float beta,
 		float* const c_ptr, const std::size_t ldc, const std::size_t stridec,
-		const unsigned batch_count
+		const unsigned batch_count,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 4;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
 
@@ -452,17 +461,18 @@ void mtk::cugemm::gemm_strided_batch_2xNx2<cuComplex>(
 		const cuComplex* const b_ptr, const std::size_t ldb, const std::size_t strideb,
 		const cuComplex beta,
 		cuComplex* const c_ptr, const std::size_t ldc, const std::size_t stridec,
-		const unsigned batch_count
+		const unsigned batch_count,
+		cudaStream_t cuda_stream
 		) {
 	constexpr unsigned M_PER_THREAD = 2;
 	constexpr unsigned BLOCK_SIZE = 256;
 	if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
-		gemm_strided_batch_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count);
+		gemm_strided_batch_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
