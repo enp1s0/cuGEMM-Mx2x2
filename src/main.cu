@@ -223,15 +223,22 @@ void gemm_strided_batch_internal(
 		T* const c_ptr, const std::size_t ldc, const std::size_t stridec,
 		const std::size_t batch_count
 		) {
-	assert(M >= M_PER_THREAD);
 	assert((M & (M - 1)) == 0);
 	const auto min_grid_size = std::max<unsigned>(M / (M_PER_THREAD * BLOCK_SIZE), 1u);
 	const auto grid_size = dim3(min_grid_size, batch_count);
 
-	if (detail::is_zero(beta)) {
-		gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+	if (M >= BLOCK_SIZE) {
+		if (detail::is_zero(beta)) {
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+		} else {
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+		}
 	} else {
-		gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+		if (detail::is_zero(beta)) {
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+		} else {
+			gemm_strided_batch_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec);
+		}
 	}
 }
 } // unnamed namespace
