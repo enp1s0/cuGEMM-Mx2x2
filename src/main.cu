@@ -182,15 +182,22 @@ void gemm_internal(
 		const T beta,
 		T* const c_ptr, const std::size_t ldc
 		) {
-	assert(M >= M_PER_THREAD);
 	assert((M & (M - 1)) == 0);
 	const auto min_grid_size = std::max<unsigned>(M / (M_PER_THREAD * BLOCK_SIZE), 1u);
 	const auto grid_size = min_grid_size;
 
-	if (detail::is_zero(beta)) {
-		gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+	if (M >= BLOCK_SIZE) {
+		if (detail::is_zero(beta)) {
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		} else {
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		}
 	} else {
-		gemm_kernel<T, LAYOUT_A, LAYOUT_B, BLOCK_SIZE, M_PER_THREAD, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		if (detail::is_zero(beta)) {
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, false, N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		} else {
+			gemm_kernel<T, LAYOUT_A, LAYOUT_B, 1, 1, true , N, K><<<grid_size, BLOCK_SIZE>>>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc);
+		}
 	}
 }
 
