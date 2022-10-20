@@ -290,9 +290,9 @@ void mtk::cugemm::gemm_Mx2x2<float>(
 		gemm_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	}
 }
@@ -315,9 +315,9 @@ void mtk::cugemm::gemm_Mx2x2<cuComplex>(
 		gemm_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, b_ptr, ldb, beta, c_ptr, ldc, cuda_stream);
 	}
 }
@@ -341,9 +341,9 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<float>(
 		gemm_strided_batch_internal<float, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_strided_batch_internal<float, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<float, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<float, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
@@ -367,9 +367,9 @@ void mtk::cugemm::gemm_strided_batch_Mx2x2<cuComplex>(
 		gemm_strided_batch_internal<cuComplex, col_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_strided_batch_internal<cuComplex, row_major, col_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<cuComplex, col_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<cuComplex, row_major, row_major, col_major, BLOCK_SIZE, M_PER_THREAD>(M, alpha, a_ptr, lda, stridea, b_ptr, ldb, strideb, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
@@ -393,9 +393,9 @@ void mtk::cugemm::gemm_2xNx2<float>(
 		gemm_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	}
 }
@@ -418,9 +418,9 @@ void mtk::cugemm::gemm_2xNx2<cuComplex>(
 		gemm_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, a_ptr, lda, beta, c_ptr, ldc, cuda_stream);
 	}
 }
@@ -444,9 +444,9 @@ void mtk::cugemm::gemm_strided_batch_2xNx2<float>(
 		gemm_strided_batch_internal<float, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_strided_batch_internal<float, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<float, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<float, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
@@ -470,9 +470,9 @@ void mtk::cugemm::gemm_strided_batch_2xNx2<cuComplex>(
 		gemm_strided_batch_internal<cuComplex, row_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
 		gemm_strided_batch_internal<cuComplex, col_major, row_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_N && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<cuComplex, row_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
-	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_N) {
+	} else if (op_a == CUBLAS_OP_T && op_b == CUBLAS_OP_T) {
 		gemm_strided_batch_internal<cuComplex, col_major, col_major, row_major, BLOCK_SIZE, M_PER_THREAD>(N, alpha, b_ptr, ldb, strideb, a_ptr, lda, stridea, beta, c_ptr, ldc, stridec, batch_count, cuda_stream);
 	}
 }
