@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <cublas.h>
+#include <cublas_v2.h>
 
 namespace mtk {
 namespace cugemm {
